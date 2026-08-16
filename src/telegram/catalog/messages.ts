@@ -1,6 +1,6 @@
 // src/telegram/catalog/messages.ts — catalog actions for sending and managing messages.
 import { z } from 'zod'
-import type { TelegramClient } from '@mtcute/bun'
+import type { TelegramClient } from '@mtcute/node'
 import type { ToolContext } from '../../types'
 import { parseOutbound } from '../markdown'
 import { toPeer } from '../normalize'

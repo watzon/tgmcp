@@ -1,5 +1,5 @@
-import type { Message } from '@mtcute/bun'
-import { SearchFilters } from '@mtcute/bun'
+import type { Message } from '@mtcute/node'
+import { SearchFilters } from '@mtcute/node'
 import type { tl } from '@mtcute/core'
 import { mediaSummary } from './normalize'
 

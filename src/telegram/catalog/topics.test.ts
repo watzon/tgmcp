@@ -1,4 +1,4 @@
-import { tl } from '@mtcute/bun'
+import { tl } from '@mtcute/node'
 import { describe, expect, test } from 'bun:test'
 import { makeContext } from '../../test/context'
 import { invokeAction } from './index'

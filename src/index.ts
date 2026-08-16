@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { applyHome } from './home'
 import { serve } from './serve'
 

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import QRCode from 'qrcode'
-import type { TelegramClient, User } from '@mtcute/bun'
+import type { TelegramClient, User } from '@mtcute/node'
 import type { TgmcpConfig } from '../config'
 import { createRuntime, type Runtime } from '../runtime'
 import { createClient } from '../telegram/client'

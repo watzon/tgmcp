@@ -5,7 +5,7 @@
 // each change rate-limited and ledgered, not gated. Descriptions are written in
 // her own voice ("your account") so nothing reads as permissioned.
 import { z } from 'zod'
-import type { TelegramClient } from '@mtcute/bun'
+import type { TelegramClient } from '@mtcute/node'
 import type { ToolContext } from '../../types'
 import { defineAction } from './action'
 

@@ -1,9 +1,9 @@
-import { BunPlatform, TelegramClient } from '@mtcute/bun'
-import type { User } from '@mtcute/bun'
+import { NodePlatform, TelegramClient } from '@mtcute/node'
+import type { User } from '@mtcute/node'
 import type { TgmcpConfig } from '../config'
 
-function managedPlatform(): BunPlatform {
-  const platform = new BunPlatform()
+function managedPlatform(): NodePlatform {
+  const platform = new NodePlatform()
   // The MCP process owns SIGINT/SIGTERM. mtcute's default exit hook closes
   // the session SQLite driver too early during graceful shutdown.
   platform.beforeExit = () => () => {}

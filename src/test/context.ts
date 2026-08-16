@@ -1,4 +1,4 @@
-import type { TelegramClient } from '@mtcute/bun'
+import type { TelegramClient } from '@mtcute/node'
 import type { TgmcpConfig } from '../config'
 import type { LedgerEntry, RiskTier, ToolContext } from '../types'
 

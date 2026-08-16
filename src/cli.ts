@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { startBrowserLogin } from './auth/browser'
 import { AuthController } from './auth/controller'
 import { loadConfig, type TgmcpConfig } from './config'

@@ -1,4 +1,4 @@
-import type { TelegramClient, User } from '@mtcute/bun'
+import type { TelegramClient, User } from '@mtcute/node'
 import type { TgmcpConfig } from './config'
 import { createLedger, type LedgerStore } from './ledger'
 import { createActions } from './telegram/actions'

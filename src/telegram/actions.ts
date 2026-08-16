@@ -1,4 +1,4 @@
-import { tl, type TelegramClient } from '@mtcute/bun'
+import { tl, type TelegramClient } from '@mtcute/node'
 import type { TgmcpConfig } from '../config'
 import type { LedgerEntry, RiskTier, StoredMessage, TelegramActions } from '../types'
 import { parseOutbound } from './markdown'

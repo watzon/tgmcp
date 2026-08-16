@@ -11,4 +11,5 @@ qr-login.png
 .DS_Store
 *.log
 coverage
+dist
 *.tgz

@@ -1,4 +1,4 @@
-import type { Message } from '@mtcute/bun'
+import type { Message } from '@mtcute/node'
 import type { StoredMessage } from '../types'
 
 export function toPeer(chatId: string): number {

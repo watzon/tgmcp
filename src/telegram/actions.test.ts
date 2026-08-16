@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { TelegramClient } from '@mtcute/bun'
+import type { TelegramClient } from '@mtcute/node'
 import { TEST_CONFIG } from '../test/context'
 import type { LedgerEntry } from '../types'
 import { createActions } from './actions'

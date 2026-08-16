@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { TelegramClient, User } from '@mtcute/bun'
+import type { TelegramClient, User } from '@mtcute/node'
 import { createRuntime } from './runtime'
 import { TEST_CONFIG } from './test/context'
 

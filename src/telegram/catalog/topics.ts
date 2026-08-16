@@ -1,6 +1,6 @@
 // src/telegram/catalog/topics.ts — catalog actions for Telegram forum topics.
 import { z } from 'zod'
-import { tl, type ForumTopic, type Message, type TelegramClient } from '@mtcute/bun'
+import { tl, type ForumTopic, type Message, type TelegramClient } from '@mtcute/node'
 import Long from 'long'
 import type { RiskTier, ToolContext, ToolResult } from '../../types'
 import { mediaSummary, toPeer } from '../normalize'

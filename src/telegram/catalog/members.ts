@@ -9,7 +9,7 @@ import {
   type Photo,
   type TelegramClient,
   type Video,
-} from '@mtcute/bun'
+} from '@mtcute/node'
 import type { ToolContext, ToolImage, ToolResult } from '../../types'
 import { toPeer } from '../normalize'
 import { confineToChat, defineAction } from './action'

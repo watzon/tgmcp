@@ -1,10 +1,11 @@
 // src/telegram/catalog/media.ts - catalog actions for downloading and sending media.
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { z } from 'zod'
-import type { FileDownloadLocation, InputMediaLike, Message, Sticker, TelegramClient } from '@mtcute/bun'
-import { InputMedia, tl } from '@mtcute/bun'
+import type { FileDownloadLocation, InputMediaLike, Message, Sticker, TelegramClient } from '@mtcute/node'
+import { InputMedia, tl } from '@mtcute/node'
 import type { ToolContext, ToolResult } from '../../types'
 import { parseOutbound } from '../markdown'
 import { toPeer } from '../normalize'
@@ -209,7 +210,7 @@ function isRemoteMediaRef(media: string): boolean {
 /**
  * Resolve the file to hand mtcute for a voice note. Telegram voice notes must be
  * OGG/Opus to render with the voice bubble + waveform everywhere; a local file
- * in another format is converted with ffmpeg when available (Bun.which probe),
+ * in another format is converted with ffmpeg when available (PATH probe),
  * otherwise passed through as-is with a note. URLs and existing file ids are
  * never downloaded for conversion.
  *
@@ -225,7 +226,7 @@ async function toVoiceUpload(media: string): Promise<{
   if (!isLocalPath || /\.(ogg|oga|opus)$/i.test(media)) {
     return { file: media, note: null, generatedArtifact: null }
   }
-  const ffmpeg = Bun.which('ffmpeg')
+  const ffmpeg = which('ffmpeg')
   if (!ffmpeg) {
     return {
       file: media,
@@ -236,14 +237,12 @@ async function toVoiceUpload(media: string): Promise<{
   const artifactDir = mkdtempSync(join(tmpdir(), 'tgmcp-voice-'))
   const out = join(artifactDir, 'voice.ogg')
   try {
-    const proc = Bun.spawn([ffmpeg, '-y', '-v', 'error', '-i', media, '-c:a', 'libopus', '-b:a', '32k', out], {
+    const proc = await runProcess(ffmpeg, ['-y', '-v', 'error', '-i', media, '-c:a', 'libopus', '-b:a', '32k', out], {
       stdout: 'ignore',
       stderr: 'pipe',
     })
-    const exitCode = await proc.exited
-    if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text()
-      throw new Error(`ffmpeg voice conversion failed (${exitCode}): ${stderr.slice(0, 200)}`)
+    if (proc.exitCode !== 0) {
+      throw new Error(`ffmpeg voice conversion failed (${proc.exitCode}): ${proc.stderr.slice(0, 200)}`)
     }
     return { file: out, note: null, generatedArtifact: artifactDir }
   } catch (err) {
@@ -255,21 +254,58 @@ async function toVoiceUpload(media: string): Promise<{
 /** Best-effort duration (whole seconds) of a local audio file via ffprobe, or null. */
 async function probeDurationSeconds(file: string): Promise<number | null> {
   if (isRemoteMediaRef(file)) return null
-  const ffprobe = Bun.which('ffprobe')
+  const ffprobe = which('ffprobe')
   if (!ffprobe) return null
   try {
-    const proc = Bun.spawn(
-      [ffprobe, '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', file],
+    const proc = await runProcess(
+      ffprobe,
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', file],
       { stdout: 'pipe', stderr: 'ignore' },
     )
-    const exitCode = await proc.exited
-    if (exitCode !== 0) return null
-    const text = (await new Response(proc.stdout).text()).trim()
-    const seconds = Number(text)
+    if (proc.exitCode !== 0) return null
+    const seconds = Number(proc.stdout.trim())
     return Number.isFinite(seconds) && seconds >= 0 ? Math.round(seconds) : null
   } catch {
     return null
   }
+}
+
+function which(bin: string): string | null {
+  const dirs = (process.env.PATH ?? '').split(delimiter)
+  const exts = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : ['']
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const candidate = join(dir, `${bin}${ext}`)
+      if (existsSync(candidate)) return candidate
+    }
+  }
+  return null
+}
+
+function runProcess(
+  command: string,
+  args: string[],
+  opts: { stdout: 'pipe' | 'ignore'; stderr: 'pipe' | 'ignore' },
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ['ignore', opts.stdout === 'pipe' ? 'pipe' : 'ignore', opts.stderr === 'pipe' ? 'pipe' : 'ignore'],
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.setEncoding('utf8')
+    child.stderr?.setEncoding('utf8')
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk
+    })
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk
+    })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      resolve({ exitCode: code ?? 1, stdout, stderr })
+    })
+  })
 }
 
 const sendVoice = defineAction({

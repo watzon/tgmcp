@@ -1,6 +1,6 @@
 // src/telegram/catalog/folders.ts — catalog actions for Telegram dialog folders.
 import { z } from 'zod'
-import { getMarkedPeerId, type TelegramClient } from '@mtcute/bun'
+import { getMarkedPeerId, type TelegramClient } from '@mtcute/node'
 import type { tl } from '@mtcute/core'
 import type { ToolContext } from '../../types'
 import { toPeer } from '../normalize'

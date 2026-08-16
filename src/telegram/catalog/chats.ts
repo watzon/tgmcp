@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { tl, type TelegramClient } from '@mtcute/bun'
+import { tl, type TelegramClient } from '@mtcute/node'
 import type { ToolContext } from '../../types'
 import { toPeer } from '../normalize'
 import { confineToChat, defineAction } from './action'

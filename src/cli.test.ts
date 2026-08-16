@@ -29,13 +29,4 @@ describe('cli', () => {
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('unknown command')
   })
-
-  test('node bin wrapper reaches the CLI when bun is installed', () => {
-    const result = spawnSync('node', ['bin/tgmcp.mjs', 'help'], {
-      encoding: 'utf8',
-      cwd: process.cwd(),
-    })
-    expect(result.status).toBe(0)
-    expect(result.stdout).toContain('Usage:')
-  })
 })

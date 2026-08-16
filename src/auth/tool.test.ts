@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
@@ -58,7 +58,7 @@ describe('auth tool', () => {
     expect(result.ok).toBe(true)
     expect(containsSecret(result.content, [secret])).toBe(false)
     expect(containsSecret(JSON.stringify(result.data), [secret])).toBe(false)
-    const stored = await Bun.file(path).json()
+    const stored = JSON.parse(readFileSync(path, 'utf8')) as { apiId: number; apiHash: string }
     expect(stored).toMatchObject({ apiId: 4242, apiHash: secret })
     await auth.close()
     rmSync(dir, { recursive: true, force: true })

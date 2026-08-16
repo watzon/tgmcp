@@ -1,6 +1,6 @@
 // src/telegram/catalog/drafts.ts — catalog actions for reading and managing chat drafts.
 import { z } from 'zod'
-import type { TelegramClient } from '@mtcute/bun'
+import type { TelegramClient } from '@mtcute/node'
 import type { ToolContext } from '../../types'
 import { toPeer } from '../normalize'
 import { confineToChat, defineAction } from './action'

@@ -30,6 +30,7 @@ An MCP server that automates one Telegram **user account** through the Telegram 
 - The public tool list is an inbox, not an autonomous account manager. Join, leave, profile edits, folders, and invites stay in the catalog behind a search query.
 - Prefer browser login on a local machine. Use the agent `auth` tool only when the host is remote. Never put `apiHash`, login codes, or 2FA passwords in tool results or logs.
 - Published installs write state under the home directory. A clone with `tgmcp.config.json` in cwd keeps using that directory.
+- Runtime is Node.js. Do not import `bun:*` modules or the `Bun` global in shipped code. Tests may use `bun:test`.
 - The public tool list is static. Do not hide tools based on auth state. Hosts often cache the list at connect and ignore `tools/list_changed`. Call `auth` (command `status`) once per session before other tools. Unsigned inbox calls must tell the host to use the `auth` tool to authenticate.
 
 ## Runtime flow

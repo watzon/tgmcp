@@ -1,5 +1,5 @@
-import { md } from '@mtcute/bun'
-import type { InputText, TextWithEntities } from '@mtcute/bun'
+import { md } from '@mtcute/node'
+import type { InputText, TextWithEntities } from '@mtcute/node'
 
 export function parseOutbound(raw: string): InputText {
   try {

@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { Database } from 'bun:sqlite'
+import Database from 'better-sqlite3'
 import type { LedgerEntry } from './types'
 
 export interface LedgerStore {

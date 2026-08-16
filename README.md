@@ -1,35 +1,37 @@
 # tgmcp
 
-[![npm](https://img.shields.io/npm/v/tgmcp.svg)](https://www.npmjs.com/package/tgmcp)
+[![npm](https://img.shields.io/npm/v/@watzon/tgmcp.svg)](https://www.npmjs.com/package/@watzon/tgmcp)
 [![ci](https://img.shields.io/github/actions/workflow/status/watzon/tgmcp/ci.yml?branch=main)](https://github.com/watzon/tgmcp/actions)
-[![bun](https://img.shields.io/badge/bun-%3E%3D1.2-f472b6)](https://bun.sh)
+[![node](https://img.shields.io/badge/node-%3E%3D20-3c873a)](https://nodejs.org)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 MCP server that automates **one Telegram user account** through the Telegram user API ([mtcute](https://mtcute.dev)). It is not a bot.
 
 The public tool list is an inbox: list chats, read, send, and search. Everything else lives in an action catalog behind `telegram` search / describe / invoke. Empty catalog search shows inbox and lookup actions only. Join, leave, and profile edits stay hidden until you search for them.
 
-tgmcp needs [Bun](https://bun.sh). `npx` works if Bun is on your `PATH`. `bunx` is the direct path.
+tgmcp runs on [Node.js](https://nodejs.org) 20 or newer. `npx` and `bunx` both work.
 
 ## Install
 
 One-shot (no global install):
 
 ```bash
-bunx tgmcp login
+npx @watzon/tgmcp login
 ```
 
 ```bash
-npx tgmcp login
+bunx @watzon/tgmcp login
 ```
 
 Global install:
 
 ```bash
-bun add -g tgmcp
+npm install -g @watzon/tgmcp
 # or
-npm install -g tgmcp
+bun add -g @watzon/tgmcp
 ```
+
+That puts `tgmcp` on your `PATH`.
 
 From a clone:
 
@@ -63,46 +65,72 @@ tgmcp
 tgmcp serve
 ```
 
-The process speaks MCP on stdio. Point your host at that command.
+The process speaks MCP on stdio. Point your host at that command. Host snippets for Claude Code, Cursor, OpenClaw, and Hermes are in [agent instructions](#agent-instructions).
 
-### Claude Code / Cursor / other stdio hosts
+## Agent instructions
+
+<details>
+<summary>Read this if you are an agent installing tgmcp</summary>
+
+You are installing tgmcp. It is an MCP server that automates one Telegram user account through the Telegram user API. It is not a bot. Do not ask for a bot token.
+
+### Requirements
+
+- Node.js 20 or newer on the machine that will run the server. Prefer `npx -y @watzon/tgmcp`. `bunx @watzon/tgmcp` also works.
+- An `api_id` and `api_hash` from [my.telegram.org](https://my.telegram.org). The user already has these, or they get them there.
+
+Do not clone the repo unless the user asked for a development checkout.
+
+### Wire the host
+
+Generic stdio, Claude Code, Cursor, and OpenClaw:
 
 ```json
 {
   "mcpServers": {
     "telegram": {
-      "command": "bunx",
-      "args": ["tgmcp"]
+      "command": "npx",
+      "args": ["-y", "@watzon/tgmcp"]
     }
   }
 }
 ```
 
-`npx -y tgmcp` works the same way if Bun is installed.
+`bunx @watzon/tgmcp` is the same command if you prefer Bun.
 
-### OpenClaw
-
-```json
-{
-  "mcpServers": {
-    "telegram": {
-      "command": "bunx",
-      "args": ["tgmcp"]
-    }
-  }
-}
-```
-
-### Hermes
+Hermes:
 
 ```yaml
 mcp_servers:
   telegram:
-    command: "bunx"
-    args: ["tgmcp"]
+    command: "npx"
+    args: ["-y", "@watzon/tgmcp"]
 ```
 
-To pin a data directory, set `TGMCP_HOME` in the host env. From a clone, you can still run `bun src/index.ts` with `cwd` set to the repo.
+Default data home is `~/.tgmcp`. Set `TGMCP_HOME` in the host env only if the user wants a different directory. From a clone, `bun src/index.ts` with `cwd` set to the repo still works.
+
+### Sign in
+
+1. On the same machine as the server, run `npx @watzon/tgmcp login` (or `tgmcp login` if it is installed). A page binds to `127.0.0.1`. The user finishes it in a browser. Do not ask them to paste `apiHash`, the login code, or a 2FA password into chat.
+2. On a remote host, start the server unsigned. Call `auth` with `command: "status"` first. Then `set_credentials`, then `send_code` / `sign_in`, or `start_qr`. Prefer `auth` `command: "browser"` if they can open or port-forward that URL.
+3. Never echo `apiHash`, login codes, or 2FA passwords in tool results, logs, or later messages.
+
+### After it is connected
+
+- Call `auth` with `command: "status"` once per session before other tools. The tool list does not change with auth state.
+- Use `list_chats` to get a numeric `chatId`. Pass that `chatId` on every chat-scoped call. Groups and channels are negative.
+- Inbox tools: `list_chats`, `read_messages`, `send_message`, `search_messages`.
+- Longer tail goes through `telegram` with `command` `search`, `describe`, or `invoke`. Empty search lists inbox and lookup actions only. Search `join`, `leave`, `folder`, or `profile` for account-admin actions.
+
+Example:
+
+```text
+telegram { command: "search", query: "pin topic" }
+telegram { command: "describe", name: "pin" }
+telegram { command: "invoke", name: "pin", params: { chatId: "-100123", messageId: 42 } }
+```
+
+</details>
 
 ## Tools
 
@@ -183,6 +211,8 @@ Copy `.env.example` to `.env` in that directory if you want env overrides.
 bun install
 bun test
 bun run typecheck
+bun run build
+node dist/cli.js help
 bun run login
 bun src/index.ts
 ```

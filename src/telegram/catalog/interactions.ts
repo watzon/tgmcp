@@ -1,7 +1,7 @@
 // src/telegram/catalog/interactions.ts — live inspect / press / vote / media-group actions.
 import { createHmac, randomBytes } from 'node:crypto'
 import { z } from 'zod'
-import type { Message, TelegramClient } from '@mtcute/bun'
+import type { Message, TelegramClient } from '@mtcute/node'
 import type { tl } from '@mtcute/core'
 import type { ToolContext, ToolResult } from '../../types'
 import { toPeer } from '../normalize'
