@@ -1,0 +1,14 @@
+{
+  "ownerId": "",
+  "telegram": {
+    "sessionPath": "storage/session",
+    "credentialsPath": "storage/credentials.json"
+  },
+  "ledgerPath": "data/tgmcp.db",
+  "downloadsDir": "data/downloads",
+  "denylist": [],
+  "rateLimits": {
+    "perChatMs": 2000,
+    "globalPerHour": 120
+  }
+}

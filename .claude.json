@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "tgmcp": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["src/index.ts"],
+      "env": {
+        "TGMCP_HOME": "."
+      }
+    }
+  }
+}

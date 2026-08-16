@@ -1,0 +1,9 @@
+**/*.test.ts
+src/test
+data
+storage
+.env
+.grok
+.mcp.json
+.claude.json
+CONTEXT.md

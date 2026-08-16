@@ -1,0 +1,14 @@
+node_modules
+data
+storage
+.env
+*.db
+*.db-shm
+*.db-wal
+qr-login.png
+.login-pending.json
+.grok
+.DS_Store
+*.log
+coverage
+*.tgz
