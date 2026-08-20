@@ -1,6 +1,6 @@
 {
   "name": "@watzon/tgmcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server that automates a Telegram user account through the user API.",
   "type": "module",
   "license": "MIT",
