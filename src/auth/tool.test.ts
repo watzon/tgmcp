@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
+import { parseProxyUrl } from '../telegram/proxy'
 import { TEST_CONFIG } from '../test/context'
 import { containsSecret } from './credentials'
 import { AuthController } from './controller'
@@ -17,6 +18,29 @@ describe('auth tool', () => {
     expect(tool.description).toBe(AUTH_TOOL_DESCRIPTION)
     expect(tool.description).toContain('once per session')
     expect(tool.description).toContain('command status')
+  })
+
+  test('status includes proxy without secret', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tgmcp-auth-proxy-'))
+    const config = {
+      ...TEST_CONFIG,
+      telegram: {
+        ...TEST_CONFIG.telegram,
+        apiId: 99,
+        apiHash: 'super-secret-hash-value',
+        credentialsPath: join(dir, 'credentials.json'),
+        sessionPath: join(dir, 'session'),
+      },
+      proxy: { type: 'socks5' as const, host: 'proxy.example.com', port: 1080 },
+      proxyTransport: parseProxyUrl('socks5://user:proxy-secret@proxy.example.com:1080').transport,
+    }
+    const auth = new AuthController(config)
+    const tool = createAuthTool(auth, async () => ({ url: 'http://127.0.0.1:1/' }))
+    const result = await tool.execute({ command: 'status' }, {} as never)
+    expect(result.ok).toBe(true)
+    expect(JSON.stringify(result.data)).toContain('proxy.example.com')
+    expect(containsSecret(JSON.stringify(result.data), ['proxy-secret'])).toBe(false)
+    rmSync(dir, { recursive: true, force: true })
   })
 
   test('status does not leak a stored hash', async () => {

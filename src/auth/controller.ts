@@ -101,6 +101,7 @@ export class AuthController {
             username: this.me.username ?? null,
           }
         : null,
+      proxy: this.config.proxy,
       pendingPhone: maskMaybePhone(this.readPending()?.phone),
       qrUrl: this.qrUrl,
       qrExpires: this.qrExpires?.toISOString() ?? null,

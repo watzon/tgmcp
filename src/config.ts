@@ -1,7 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import type { TelegramTransport } from '@mtcute/node'
 import { z } from 'zod'
 import { loadCredentials } from './auth/credentials'
+import { parseProxyUrl, type PublicProxyInfo } from './telegram/proxy'
 
 const rateLimitsSchema = z.object({
   perChatMs: z.number().int().nonnegative().default(2000),
@@ -13,6 +15,7 @@ const fileSchema = z.object({
   telegram: z.object({
     sessionPath: z.string().min(1).default('storage/session'),
     credentialsPath: z.string().min(1).default('storage/credentials.json'),
+    proxy: z.string().min(1).optional(),
   }),
   ledgerPath: z.string().min(1).default('data/tgmcp.db'),
   downloadsDir: z.string().min(1).default('data/downloads'),
@@ -23,6 +26,9 @@ const fileSchema = z.object({
 export interface TgmcpConfig {
   ownerId: string
   telegram: { apiId: number; apiHash: string; sessionPath: string; credentialsPath: string }
+  proxy: PublicProxyInfo | null
+  /** Resolved mtcute transport. Never log or return in tool results. */
+  proxyTransport?: TelegramTransport
   ledgerPath: string
   downloadsDir: string
   denylist: string[]
@@ -93,6 +99,15 @@ export function loadConfig(path = DEFAULT_CONFIG_PATH): TgmcpConfig {
     apiHash = stored.apiHash
   }
 
+  const proxyUrl = envString('TGMCP_PROXY') ?? file.telegram.proxy
+  let proxy: PublicProxyInfo | null = null
+  let proxyTransport: TelegramTransport | undefined
+  if (proxyUrl) {
+    const resolved = parseProxyUrl(proxyUrl)
+    proxy = resolved.public
+    proxyTransport = resolved.transport
+  }
+
   return {
     ownerId: file.ownerId || stored?.ownerId || '',
     telegram: {
@@ -101,6 +116,8 @@ export function loadConfig(path = DEFAULT_CONFIG_PATH): TgmcpConfig {
       sessionPath: file.telegram.sessionPath,
       credentialsPath: file.telegram.credentialsPath,
     },
+    proxy,
+    proxyTransport,
     ledgerPath: file.ledgerPath,
     downloadsDir: file.downloadsDir,
     denylist: file.denylist,

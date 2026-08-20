@@ -57,6 +57,38 @@ Optional: put `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` in `.env` in the data ho
 
 Check the session with `tgmcp status`.
 
+## Telegram proxy (blocked datacenter IPs)
+
+Many cloud VMs and datacenter hosts cannot reach Telegram's user-API DCs directly. `send_code`, QR login, and even an existing session copied from another machine will time out with errors like "Telegram did not respond in time" until traffic routes through a proxy that can reach Telegram.
+
+Run an MTProxy ([mtg](https://github.com/9seconds/mtg), the official MTProxy, or similar) or a SOCKS5 proxy on a host with normal Telegram access — often a home connection or a VPS outside blocked ranges. Point tgmcp at that endpoint; tgmcp does not provide the proxy itself.
+
+Set the proxy URL in either place (env wins when both are set):
+
+1. `TGMCP_PROXY` in `.env` or the MCP host environment
+2. `telegram.proxy` in `tgmcp.config.json`
+
+Supported forms:
+
+```bash
+# SOCKS5 / SOCKS4
+TGMCP_PROXY=socks5://user:pass@proxy.example.com:1080
+
+# HTTP(S) CONNECT proxy
+TGMCP_PROXY=http://proxy.example.com:8080
+
+# MTProxy (query or fragment secret)
+TGMCP_PROXY=mtproxy://proxy.example.com:443?secret=HEX
+TGMCP_PROXY=mtproxy://proxy.example.com:443#HEX
+
+# Official Telegram share link
+TGMCP_PROXY=tg://proxy?server=proxy.example.com&port=443&secret=HEX
+```
+
+`auth` status reports `proxy: { type, host, port }` when configured. Secrets and proxy passwords are never logged or returned in tool results.
+
+An existing session file still needs Telegram reachable through the proxy on every connect — copying `storage/session` alone is not enough if the host cannot talk to Telegram.
+
 ## Run the MCP server
 
 ```bash
@@ -197,6 +229,8 @@ Copy `.env.example` to `.env` in that directory if you want env overrides.
 ```
 
 `ownerId` is filled in after the first login. If you set it yourself, tgmcp refuses to start as a different account.
+
+Optional `telegram.proxy` holds a proxy URL (same formats as `TGMCP_PROXY`). Env overrides the file when both are set. See [Telegram proxy](#telegram-proxy-blocked-datacenter-ips).
 
 ## Safety
 
