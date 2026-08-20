@@ -133,9 +133,9 @@ export function loginPageHtml(token: string): string {
       const data = await api('/api/status');
       const s = data.data;
       phaseEl.textContent = s.phase + '. ' + s.hint;
-      err.textContent = '';
+      err.textContent = s.authError || '';
       show('creds', s.phase === 'need_credentials');
-      show('phone', s.phase === 'need_login');
+      show('phone', s.phase === 'need_login' || s.phase === 'sending_code');
       show('code', s.phase === 'pending_code');
       show('qrbox', s.phase === 'pending_qr');
       show('done', s.phase === 'ready');

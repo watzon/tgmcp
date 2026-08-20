@@ -181,7 +181,7 @@ async function main(): Promise<void> {
         console.log(`${status.phase}. ${status.hint}`)
         console.log(`home: ${home}`)
         if (status.account) console.log(`account: ${status.account.name} (id ${status.account.id})`)
-        if (status.hasCredentials) console.log(`apiId: ${status.apiId} hash ${status.apiHash}`)
+        if (status.hasCredentials) console.log(`hash ${status.apiHash}`)
       })
       return
     default:

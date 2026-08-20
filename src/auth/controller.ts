@@ -7,18 +7,34 @@ import { createRuntime, type Runtime } from '../runtime'
 import { createClient } from '../telegram/client'
 import type { ToolResult } from '../types'
 import { loadCredentials, maskHash, maskPhone, saveCredentials } from './credentials'
+import {
+  CONNECT_TIMEOUT_MS,
+  formatAuthError,
+  isPasswordNeeded,
+  isRecoverableResumeError,
+  QR_URL_TIMEOUT_MS,
+  SEND_CODE_TIMEOUT_MS,
+  withTimeout,
+} from './errors'
 import type { AuthPhase, PendingLogin, PublicAuthStatus } from './types'
 
-function isPasswordNeeded(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false
-  const text = (err as { text?: unknown }).text
-  if (text === 'SESSION_PASSWORD_NEEDED') return true
-  const message = (err as { message?: unknown }).message
-  return typeof message === 'string' && message.includes('SESSION_PASSWORD_NEEDED')
+type ClientFactory = (config: TgmcpConfig) => TelegramClient
+
+export interface AuthTimeouts {
+  connectMs: number
+  sendCodeMs: number
+  qrUrlMs: number
 }
 
-function errorText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
+const DEFAULT_TIMEOUTS: AuthTimeouts = {
+  connectMs: CONNECT_TIMEOUT_MS,
+  sendCodeMs: SEND_CODE_TIMEOUT_MS,
+  qrUrlMs: QR_URL_TIMEOUT_MS,
+}
+
+export interface AuthControllerDeps {
+  createClient?: ClientFactory
+  timeouts?: Partial<AuthTimeouts>
 }
 
 export class AuthController {
@@ -28,9 +44,23 @@ export class AuthController {
   private qrUrl: string | null = null
   private qrExpires: Date | null = null
   private qrTask: Promise<void> | null = null
+  private qrAbort: AbortController | null = null
+  private qrUrlTimer: ReturnType<typeof setTimeout> | null = null
+  private sendCodeTask: Promise<void> | null = null
+  private sendCodeAbort: AbortController | null = null
+  private sendingCode = false
+  private authError: string | null = null
   private readonly readyListeners = new Set<() => void>()
+  private readonly createClientFn: ClientFactory
+  private readonly timeouts: AuthTimeouts
 
-  constructor(public config: TgmcpConfig) {}
+  constructor(
+    public config: TgmcpConfig,
+    deps: AuthControllerDeps = {},
+  ) {
+    this.createClientFn = deps.createClient ?? createClient
+    this.timeouts = { ...DEFAULT_TIMEOUTS, ...deps.timeouts }
+  }
 
   onReady(listener: () => void): void {
     this.readyListeners.add(listener)
@@ -50,6 +80,7 @@ export class AuthController {
     if (this.me && this.config.ownerId && String(this.me.id) !== this.config.ownerId) {
       return 'owner_mismatch'
     }
+    if (this.sendingCode) return 'sending_code'
     if (this.qrTask) return 'pending_qr'
     if (this.readPending()) return 'pending_code'
     return 'need_login'
@@ -61,7 +92,6 @@ export class AuthController {
       phase,
       ready: this.ready,
       hasCredentials: this.hasCredentials,
-      apiId: this.hasCredentials ? this.config.telegram.apiId : null,
       apiHash: this.hasCredentials ? maskHash(this.config.telegram.apiHash) : null,
       ownerId: this.config.ownerId,
       account: this.me
@@ -74,6 +104,7 @@ export class AuthController {
       pendingPhone: maskMaybePhone(this.readPending()?.phone),
       qrUrl: this.qrUrl,
       qrExpires: this.qrExpires?.toISOString() ?? null,
+      authError: this.authError,
       preferred: 'browser',
       hint: hintFor(phase),
     }
@@ -83,10 +114,14 @@ export class AuthController {
     if (!this.hasCredentials) return
     try {
       const client = await this.ensureClient()
-      const me = await client.getMe()
+      const me = await withTimeout(client.getMe(), this.timeouts.connectMs, 'Session check timed out')
       await this.complete(me)
-    } catch {
-      // Session missing or dead. Keep the client connected for login.
+    } catch (err) {
+      if (!isRecoverableResumeError(err)) {
+        await this.resetLoginClient()
+      } else {
+        await this.handleUnauthenticatedClient(err)
+      }
     }
   }
 
@@ -109,52 +144,74 @@ export class AuthController {
     return {
       ok: true,
       content: `Saved API credentials (apiId ${apiId}, hash ${maskHash(this.config.telegram.apiHash)}). Hash is not shown again.`,
-      data: { apiId, apiHash: maskHash(this.config.telegram.apiHash) },
+      data: { apiHash: maskHash(this.config.telegram.apiHash) },
     }
   }
 
   async sendCode(phone: string): Promise<ToolResult> {
     const creds = this.requireCredentials()
     if (creds) return creds
+    if (this.ready) return this.readyResult('Already signed in.')
+    if (this.sendingCode) {
+      return {
+        ok: false,
+        content: 'A login code request is already in progress. Poll auth status until phase changes.',
+      }
+    }
+
     this.cancelQr()
+    this.authError = null
     const cleaned = phone.trim()
     if (!/^\+\d{7,15}$/.test(cleaned)) {
       return { ok: false, content: 'phone must be E.164, for example +15551234567.' }
     }
-    const client = await this.ensureClient()
-    const sent = await client.sendCode({ phone: cleaned })
-    if (!('phoneCodeHash' in sent)) {
-      await this.complete(sent)
-      return this.readyResult('Already signed in.')
-    }
-    this.writePending({ phone: cleaned, phoneCodeHash: sent.phoneCodeHash })
+
+    this.sendingCode = true
+    this.sendCodeTask = this.executeSendCode(cleaned)
+
     return {
       ok: true,
-      content: `Login code sent to ${maskPhone(cleaned)} via ${sent.type}. Call auth sign_in with the code.`,
-      data: { via: sent.type, phone: maskPhone(cleaned) },
+      content: `Sending login code to ${maskPhone(cleaned)}. Poll auth status until phase is pending_code or authError is set.`,
+      data: { phase: 'sending_code', phone: maskPhone(cleaned) },
     }
   }
 
   async resendCode(): Promise<ToolResult> {
     const pending = this.readPending()
     if (!pending) return { ok: false, content: 'No pending phone login. Call send_code first.' }
-    const client = await this.ensureClient()
-    const sent = await client.resendCode({
-      phone: pending.phone,
-      phoneCodeHash: pending.phoneCodeHash,
-    })
-    this.writePending({ phone: pending.phone, phoneCodeHash: sent.phoneCodeHash })
-    return {
-      ok: true,
-      content: `Code re-sent to ${maskPhone(pending.phone)} via ${sent.type}.`,
-      data: { via: sent.type },
+    const client = await this.prepareLoginClient()
+    const abort = new AbortController()
+    this.sendCodeAbort = abort
+    try {
+      const sent = await withTimeout(
+        client.resendCode({
+          phone: pending.phone,
+          phoneCodeHash: pending.phoneCodeHash,
+          abortSignal: abort.signal,
+        }),
+        this.timeouts.sendCodeMs,
+        'Telegram did not respond in time',
+      )
+      this.writePending({ phone: pending.phone, phoneCodeHash: sent.phoneCodeHash })
+      this.authError = null
+      return {
+        ok: true,
+        content: `Code re-sent to ${maskPhone(pending.phone)} via ${sent.type}.`,
+        data: { via: sent.type },
+      }
+    } catch (err) {
+      abort.abort()
+      this.authError = formatAuthError(err)
+      return { ok: false, content: `Resend failed: ${this.authError}` }
+    } finally {
+      this.sendCodeAbort = null
     }
   }
 
   async signIn(code: string, password?: string): Promise<ToolResult> {
     const pending = this.readPending()
     if (!pending) return { ok: false, content: 'No pending phone login. Call send_code first.' }
-    const client = await this.ensureClient()
+    const client = await this.prepareLoginClient()
     try {
       let user: User
       try {
@@ -168,16 +225,19 @@ export class AuthController {
         if (!password) {
           return {
             ok: false,
-            content: 'Two-factor password required. Call sign_in again with password. Prefer the browser path so the password never enters the model.',
+            content:
+              'Two-factor password required. Call sign_in again with password. Prefer the browser path so the password never enters the model.',
           }
         }
         user = await client.checkPassword(password)
       }
       this.clearPending()
+      this.authError = null
       await this.complete(user)
       return this.readyResult('Signed in.')
     } catch (err) {
-      return { ok: false, content: `Sign-in failed: ${errorText(err)}` }
+      this.authError = formatAuthError(err)
+      return { ok: false, content: `Sign-in failed: ${this.authError}` }
     }
   }
 
@@ -185,48 +245,50 @@ export class AuthController {
     const creds = this.requireCredentials()
     if (creds) return creds
     if (this.ready) return this.readyResult('Already signed in.')
-    const client = await this.ensureClient()
+
+    this.cancelSendCode()
+    this.authError = null
+
     if (!this.qrTask) {
-      this.qrTask = client
-        .signInQr({
-          onUrlUpdated: (url, expires) => {
-            this.qrUrl = url
-            this.qrExpires = expires
-          },
-          onQrScanned: () => {
-            this.qrUrl = this.qrUrl
-          },
-          password,
-        })
-        .then(async (user) => {
-          this.clearPending()
-          await this.complete(user)
-        })
+      const client = await this.prepareLoginClient()
+      if (this.ready) return this.readyResult('Already signed in.')
+
+      this.qrAbort = new AbortController()
+      this.qrUrl = null
+      this.qrExpires = null
+      this.qrUrlTimer = setTimeout(() => {
+        if (!this.qrUrl) {
+          this.authError =
+            'QR URL did not arrive from Telegram in time. Retry start_qr or use send_code.'
+          this.cancelQr()
+        }
+      }, this.timeouts.qrUrlMs)
+
+      this.qrTask = this.runQrLogin(client, password, this.qrAbort.signal)
         .catch((err) => {
-          this.qrTask = null
-          this.qrUrl = null
-          this.qrExpires = null
-          if (isPasswordNeeded(err) && !password) {
-            throw new Error(
-              'Two-factor password required. Retry start_qr with password, or use the browser path.',
-            )
+          if (this.qrAbort?.signal.aborted) return
+          if (!this.authError) this.authError = formatAuthError(err)
+        })
+        .finally(() => {
+          if (this.qrUrlTimer) {
+            clearTimeout(this.qrUrlTimer)
+            this.qrUrlTimer = null
           }
-          throw err
+          this.qrTask = null
+          this.qrAbort = null
         })
     }
-    // Give mtcute a moment to emit the first URL.
-    for (let i = 0; i < 20 && !this.qrUrl; i++) {
-      await sleep(100)
-    }
+
     const ascii = this.qrUrl ? await QRCode.toString(this.qrUrl, { type: 'terminal', small: true }) : null
     return {
       ok: true,
       content:
         'QR login started. Scan from Telegram mobile: Settings → Devices → Link Desktop Device.\n' +
-        (ascii ?? 'QR URL is not ready yet; call status again.'),
+        (ascii ?? 'Poll auth status for qrUrl.'),
       data: {
         qrUrl: this.qrUrl,
         qrExpires: this.qrExpires?.toISOString() ?? null,
+        phase: 'pending_qr',
       },
     }
   }
@@ -238,6 +300,7 @@ export class AuthController {
 
   async close(): Promise<void> {
     this.cancelQr()
+    this.cancelSendCode()
     if (this.runtime) {
       await this.runtime.close()
       this.runtime = null
@@ -247,6 +310,104 @@ export class AuthController {
     }
     if (this.client) {
       await this.client.destroy()
+      this.client = null
+    }
+  }
+
+  private async executeSendCode(phone: string): Promise<void> {
+    const abort = new AbortController()
+    this.sendCodeAbort = abort
+    try {
+      const client = await this.prepareLoginClient()
+      if (this.ready) return
+      const sent = await withTimeout(
+        client.sendCode({ phone, abortSignal: abort.signal }),
+        this.timeouts.sendCodeMs,
+        'Telegram did not respond in time',
+      )
+      if (!('phoneCodeHash' in sent)) {
+        await this.complete(sent)
+        return
+      }
+      this.writePending({ phone, phoneCodeHash: sent.phoneCodeHash })
+      this.authError = null
+    } catch (err) {
+      abort.abort()
+      this.authError = formatAuthError(err)
+    } finally {
+      this.sendingCode = false
+      this.sendCodeTask = null
+      this.sendCodeAbort = null
+    }
+  }
+
+  private async runQrLogin(
+    client: TelegramClient,
+    password: string | undefined,
+    signal: AbortSignal,
+  ): Promise<void> {
+    try {
+      const user = await client.signInQr({
+        onUrlUpdated: (url, expires) => {
+          this.qrUrl = url
+          this.qrExpires = expires
+          this.authError = null
+        },
+        onQrScanned: () => {},
+        password,
+        abortSignal: signal,
+      })
+      this.clearPending()
+      this.authError = null
+      await this.complete(user)
+    } catch (err) {
+      if (signal.aborted) return
+      if (isPasswordNeeded(err) && !password) {
+        throw new Error(
+          'Two-factor password required. Retry start_qr with password, or use the browser path.',
+        )
+      }
+      throw err
+    }
+  }
+
+  private async prepareLoginClient(): Promise<TelegramClient> {
+    if (!this.hasCredentials) {
+      throw new Error('API credentials are not set.')
+    }
+    if (this.client && !this.runtime) {
+      try {
+        const me = await withTimeout(this.client.getMe(), this.timeouts.connectMs, 'Session check timed out')
+        await this.complete(me)
+        return this.client
+      } catch (err) {
+        await this.handleUnauthenticatedClient(err)
+      }
+    }
+    return this.ensureClient()
+  }
+
+  private async handleUnauthenticatedClient(err: unknown): Promise<void> {
+    const text = typeof err === 'object' && err !== null ? (err as { text?: string }).text : null
+    if (
+      text === 'SESSION_REVOKED' ||
+      text === 'USER_DEACTIVATED' ||
+      text === 'USER_DEACTIVATED_BAN'
+    ) {
+      if (this.client) {
+        try {
+          await this.client.logOut()
+        } catch {
+          // Best effort.
+        }
+      }
+    }
+    await this.resetLoginClient()
+  }
+
+  private async resetLoginClient(): Promise<void> {
+    if (this.client && !this.runtime) {
+      await this.client.destroy().catch(() => {})
       this.client = null
     }
   }
@@ -265,14 +426,15 @@ export class AuthController {
       throw new Error('API credentials are not set.')
     }
     if (!this.client) {
-      this.client = createClient(this.config)
-      await this.client.connect()
+      this.client = this.createClientFn(this.config)
+      await withTimeout(this.client.connect(), this.timeouts.connectMs, 'Telegram connection timed out')
     }
     return this.client
   }
 
   private async resetClient(): Promise<void> {
     this.cancelQr()
+    this.cancelSendCode()
     if (this.client && !this.runtime) {
       await this.client.destroy()
     }
@@ -282,6 +444,7 @@ export class AuthController {
     }
     this.client = null
     this.me = null
+    this.authError = null
   }
 
   private async complete(user: User): Promise<void> {
@@ -303,9 +466,7 @@ export class AuthController {
     if (!this.runtime) {
       this.runtime = await createRuntime(this.config, this.client, user)
     }
-    this.qrTask = null
-    this.qrUrl = null
-    this.qrExpires = null
+    this.cancelQr()
     for (const listener of this.readyListeners) listener()
   }
 
@@ -346,9 +507,22 @@ export class AuthController {
   }
 
   private cancelQr(): void {
+    if (this.qrUrlTimer) {
+      clearTimeout(this.qrUrlTimer)
+      this.qrUrlTimer = null
+    }
+    this.qrAbort?.abort()
+    this.qrAbort = null
     this.qrTask = null
     this.qrUrl = null
     this.qrExpires = null
+  }
+
+  private cancelSendCode(): void {
+    this.sendCodeAbort?.abort()
+    this.sendCodeAbort = null
+    this.sendingCode = false
+    this.sendCodeTask = null
   }
 }
 
@@ -358,6 +532,8 @@ function hintFor(phase: AuthPhase): string {
       return 'On this machine, open the browser login. On a remote host, set_credentials then send_code or start_qr.'
     case 'need_login':
       return 'Use the browser login if you can reach this machine. Otherwise send_code or start_qr.'
+    case 'sending_code':
+      return 'Waiting for Telegram to send the login code. Poll status; do not call send_code again.'
     case 'pending_code':
       return 'Enter the login code (and 2FA password if asked). Prefer the browser so the code stays off the model.'
     case 'pending_qr':
@@ -380,5 +556,3 @@ function safeLoad(path: string): ReturnType<typeof loadCredentials> {
     return null
   }
 }
-
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
