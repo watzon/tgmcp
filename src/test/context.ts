@@ -10,6 +10,7 @@ export const TEST_CONFIG: TgmcpConfig = {
     sessionPath: 'storage/session',
     credentialsPath: 'storage/credentials.json',
   },
+  proxy: null,
   ledgerPath: 'data/tgmcp.db',
   downloadsDir: 'data/downloads',
   denylist: [],

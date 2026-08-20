@@ -1,3 +1,5 @@
+import type { PublicProxyInfo } from '../telegram/proxy'
+
 export type AuthPhase =
   | 'need_credentials'
   | 'need_login'
@@ -14,6 +16,7 @@ export interface PublicAuthStatus {
   apiHash: string | null
   ownerId: string
   account: { id: string; name: string; username: string | null } | null
+  proxy: PublicProxyInfo | null
   pendingPhone: string | null
   qrUrl: string | null
   qrExpires: string | null

@@ -10,14 +10,31 @@ function managedPlatform(): NodePlatform {
   return platform
 }
 
-export function createClient(config: TgmcpConfig): TelegramClient {
-  return new TelegramClient({
+export interface TgmcpClientOptions {
+  apiId: number
+  apiHash: string
+  storage: string
+  platform: NodePlatform
+  updates: { catchUp: boolean }
+  transport?: import('@mtcute/node').TelegramTransport
+}
+
+export function buildClientOptions(config: TgmcpConfig): TgmcpClientOptions {
+  const options: TgmcpClientOptions = {
     apiId: config.telegram.apiId,
     apiHash: config.telegram.apiHash,
     storage: config.telegram.sessionPath,
     platform: managedPlatform(),
     updates: { catchUp: false },
-  })
+  }
+  if (config.proxyTransport) {
+    options.transport = config.proxyTransport
+  }
+  return options
+}
+
+export function createClient(config: TgmcpConfig): TelegramClient {
+  return new TelegramClient(buildClientOptions(config) as ConstructorParameters<typeof TelegramClient>[0])
 }
 
 export async function startClient(client: TelegramClient): Promise<User> {

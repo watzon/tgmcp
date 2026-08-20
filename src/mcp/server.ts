@@ -26,7 +26,7 @@ function zodShape(schema: z.ZodType): z.ZodRawShape {
 
 export function createMcpServer(auth: AuthController): McpServer {
   const server = new McpServer(
-    { name: 'tgmcp', version: '0.1.1' },
+    { name: 'tgmcp', version: '0.1.2' },
     { instructions: SERVER_INSTRUCTIONS },
   )
 
